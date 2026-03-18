@@ -1,0 +1,27 @@
+{
+  "id": "custom-sr5-die",
+  "title": "Custom SR5 die option for Dice-So-Nice",
+  "description": "A Foundry VTT module for enabling custom faces to SR5 custom die (ds) and normal D6 (d6) in Dice-So-Nice",
+  "authors": [{"name": "Kurko"}],
+  "version": "0.1",
+  "compatibility": {
+	"minimum": "13",
+	"verified": "13"
+  },
+  "url": "https://github.com/BlauKreuz/custom-sr5-die",
+  "manifest": "https://github.com/BlauKreuz/custom-sr5-die/releases/download/v0.1/module.json",
+  "download": "https://github.com/BlauKreuz/custom-sr5-die/releases/download/v0.1/custom-sr5-die-v0.1.zip",
+  "esmodules": ["scripts/custom-sr5-die.js"],
+
+  "relationships": {
+	"requires": [
+	{
+	"id": "shadowrun5e",
+	"type": "system",
+	"manifest": "https://raw.githubusercontent.com/SR5-FoundryVTT/SR5-FoundryVTT/master/system.json"
+	}
+	]
+  }
+
+
+}
