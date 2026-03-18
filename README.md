@@ -8,7 +8,8 @@ Each image must be:
 
 The images will appear as selectable options in **Module Settings → Custom SR5 die option for Dice So Nice**.
 
-<img width="552" height="511" alt="image" src="https://github.com/user-attachments/assets/583be614-0f6e-476e-9743-c277e35584e4" />
+<img width="558" height="539" alt="image" src="https://github.com/user-attachments/assets/c8ce7eb5-a089-4b6e-8f9c-ede3f2d7e784" />
+
 
 
 The chosen sprite is registered as the **SR5 Die** system in Dice So Nice and is available for both the Shadowrun `ds` die and the standard `d6` in **Dice Presets (Faces)** menu.
