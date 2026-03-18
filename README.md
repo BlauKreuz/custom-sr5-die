@@ -13,7 +13,7 @@ The images will appear as selectable options in **Module Settings → Custom SR5
 
 
 The chosen sprite is registered as the **SR5 Die** system in Dice So Nice and is available for both the Shadowrun `ds` die and the standard `d6` in **Dice Presets (Faces)** menu.
-**Scene reload is needed for the changes to take effect.**
+**Scene reload is needed for the changes to take effect. **
 
 <img width="740" height="611" alt="image" src="https://github.com/user-attachments/assets/37bdb2d6-d82c-4acd-95eb-8ae8b87a4a57" />
 
