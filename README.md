@@ -19,6 +19,6 @@ The chosen sprite is registered as the **SR5 Die** system in Dice So Nice and is
 <img width="740" height="611" alt="image" src="https://github.com/user-attachments/assets/37bdb2d6-d82c-4acd-95eb-8ae8b87a4a57" />
 
 ---
-This module does not do anything if Dice-So-Nice module is not installed and in use.
+This module does not do anything if Dice So Nice module is not installed and in use.
 
 
