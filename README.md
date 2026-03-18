@@ -21,7 +21,8 @@ The chosen sprite is registered as the **SR5 Die** system in Dice So Nice and is
 
 **Scene reload is needed for the changes to take effect.**
 
-<img width="740" height="611" alt="image" src="https://github.com/user-attachments/assets/37bdb2d6-d82c-4acd-95eb-8ae8b87a4a57" />
+<img width="730" height="624" alt="image" src="https://github.com/user-attachments/assets/20309f5f-5ae2-43a4-b2c1-2fad0f348b87" />
+
 
 ---
 This module does not do anything if Dice So Nice module is not installed and in use.
