@@ -152,6 +152,7 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
 async function sliceAndUploadFaces(imagePath) {
   const img = await new Promise((res, rej) => {
     const el = new Image();
+    el.crossOrigin = "anonymous";   // prevent canvas taint on Forge / CDN origins
     el.onload = () => {
       if (!el.naturalWidth || !el.naturalHeight)
         rej(new Error(`sprite "${imagePath}" has zero dimensions`));
