@@ -12,14 +12,7 @@
 const MODULE_ID = "custom-sr5-die";
 const SR5_SYSTEM_ID = "shadowrun5e";
 const DS_TYPE = "ds";
-const IMAGES_DIR = `modules/${MODULE_ID}/images`;
-const ASSETS_DIR = `modules/${MODULE_ID}/assets/images`;
-
-// Evaluated lazily (not at module parse time) so that ForgeVTT is guaranteed
-// to be initialised by the time any hook using it fires.
-function isForge() {
-  return typeof ForgeVTT !== "undefined" && ForgeVTT.usingTheForge;
-}
+const IMAGES_DIR = `modules/${MODULE_ID}/assets/images`;
 
 // DiceSystem class imported during setup so diceSoNiceReady can run synchronously.
 let _DiceSystem = null;
@@ -67,17 +60,11 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
   formGroup.style.flexDirection = "column";
   formGroup.style.alignItems = "flex-start";
 
-  // On Forge, migrate bundled samples from the read-only CDN folder into the
-  // writable assets folder so users can manage (replace/delete) them freely.
-  const forge = isForge();
-  const writableDir = forge ? ASSETS_DIR : IMAGES_DIR;
-  if (forge) await migrateBundledImages();
-
   let available = [];
   try {
-    const result = await FilePicker.browse("data", writableDir);
+    const result = await FilePicker.browse("data", IMAGES_DIR);
     available = result.files.filter((f) => /\.(webp|png|jpg|jpeg)$/i.test(f));
-  } catch { /* folder may not exist yet */ }
+  } catch { /* images folder may not exist yet */ }
 
   const current = game.settings.get(MODULE_ID, "spriteImage");
   const esc = (v) => foundry.utils.escapeHTML(String(v ?? ""));
@@ -106,9 +93,8 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
   container.style.cssText = "width:100%;margin-top:4px;";
   container.innerHTML = [
     `<p style="font-size:.85em;margin:0 0 6px;white-space:normal;">`,
-    `Place sprite sheets (6 faces, left to right) in <code>${esc(writableDir)}/</code>`,
-    forge ? ` (your Forge Assets Library).` : `.`,
-    `<br>Click a sprite to select and slice it, then click <strong>Save Changes</strong>.</p>`,
+    `Place sprite sheets (6 faces, left to right) in <code>${esc(IMAGES_DIR)}/</code>.<br>`,
+    `Click a sprite to select and slice it, then click <strong>Save Changes</strong>.</p>`,
     `<input type="hidden" name="${MODULE_ID}.spriteImage" id="sr5-path-input" value="${esc(current)}">`,
     listHtml,
   ].join("");
@@ -151,40 +137,6 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * On Forge, copy bundled sample images from the read-only CDN folder
- * (modules/…/images/) into the writable assets folder (modules/…/assets/images/)
- * so users can freely replace or delete them. Already-present files are skipped.
- */
-async function migrateBundledImages() {
-  let bundled = [];
-  try {
-    const r = await FilePicker.browse("data", IMAGES_DIR);
-    bundled = r.files.filter((f) => /\.(webp|png|jpg|jpeg)$/i.test(f));
-  } catch { return; }
-  if (!bundled.length) return;
-
-  const existing = new Set();
-  try {
-    const r = await FilePicker.browse("data", ASSETS_DIR);
-    for (const f of r.files) existing.add(f.split("/").pop().toLowerCase());
-  } catch { /* assets folder doesn't exist yet — that's fine */ }
-
-  for (const path of bundled) {
-    const name = path.split("/").pop();
-    if (existing.has(name.toLowerCase())) continue;
-    try {
-      const resp = await fetch(path, { credentials: "same-origin" });
-      if (!resp.ok) continue;
-      const blob = await resp.blob();
-      const file = new File([blob], name, { type: blob.type });
-      await FilePicker.upload("data", ASSETS_DIR, file, {}, { notify: false });
-    } catch (err) {
-      console.warn(`SR5 Dice: could not migrate sample "${name}":`, err);
-    }
-  }
-}
 
 /**
  * Load imagePath, slice it into 6 equal vertical strips (columns), and upload
