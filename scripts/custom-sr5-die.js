@@ -15,12 +15,11 @@ const DS_TYPE = "ds";
 const IMAGES_DIR = `modules/${MODULE_ID}/images`;
 const ASSETS_DIR = `modules/${MODULE_ID}/assets/images`;
 
-// True when running inside The Forge hosting service.
-const IS_FORGE = typeof ForgeVTT !== "undefined" && ForgeVTT.usingTheForge;
-
-// On Forge, uploads are rerouted out of the read-only CDN module folder into
-// the user's writable Assets Library. On local, images/ is already writable.
-const WRITABLE_DIR = IS_FORGE ? ASSETS_DIR : IMAGES_DIR;
+// Evaluated lazily (not at module parse time) so that ForgeVTT is guaranteed
+// to be initialised by the time any hook using it fires.
+function isForge() {
+  return typeof ForgeVTT !== "undefined" && ForgeVTT.usingTheForge;
+}
 
 // DiceSystem class imported during setup so diceSoNiceReady can run synchronously.
 let _DiceSystem = null;
@@ -70,11 +69,13 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
 
   // On Forge, migrate bundled samples from the read-only CDN folder into the
   // writable assets folder so users can manage (replace/delete) them freely.
-  if (IS_FORGE) await migrateBundledImages();
+  const forge = isForge();
+  const writableDir = forge ? ASSETS_DIR : IMAGES_DIR;
+  if (forge) await migrateBundledImages();
 
   let available = [];
   try {
-    const result = await FilePicker.browse("data", WRITABLE_DIR);
+    const result = await FilePicker.browse("data", writableDir);
     available = result.files.filter((f) => /\.(webp|png|jpg|jpeg)$/i.test(f));
   } catch { /* folder may not exist yet */ }
 
@@ -105,8 +106,8 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
   container.style.cssText = "width:100%;margin-top:4px;";
   container.innerHTML = [
     `<p style="font-size:.85em;margin:0 0 6px;white-space:normal;">`,
-    `Place sprite sheets (6 faces, left to right) in <code>${esc(WRITABLE_DIR)}/</code>`,
-    IS_FORGE ? ` (your Forge Assets Library).` : `.`,
+    `Place sprite sheets (6 faces, left to right) in <code>${esc(writableDir)}/</code>`,
+    forge ? ` (your Forge Assets Library).` : `.`,
     `<br>Click a sprite to select and slice it, then click <strong>Save Changes</strong>.</p>`,
     `<input type="hidden" name="${MODULE_ID}.spriteImage" id="sr5-path-input" value="${esc(current)}">`,
     listHtml,
