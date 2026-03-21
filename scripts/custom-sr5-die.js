@@ -3,7 +3,7 @@
  *
  * Adds an "SR5 Die" system to Dice So Nice for the ds (Shadowrun) and d6
  * die types. The GM selects a single-row sprite sheet (1 row, 6 columns,
- * smallest die face at left) from the module's images/ folder in the module settings.
+ * smallest die face at left) from the world's sheets folder in the module settings.
  *
  * Also unlocks all other DSN appearance systems for the ds die type so that
  * Dot Black and others remain selectable.
@@ -12,15 +12,39 @@
 const MODULE_ID = "custom-sr5-die";
 const SR5_SYSTEM_ID = "shadowrun5e";
 const DS_TYPE = "ds";
-const IMAGES_DIR = `modules/${MODULE_ID}/assets/images`;
+
+// Bundled sample sprite sheets shipped with the module (read-only on Forge CDN).
+const BUNDLED_DIR     = `modules/${MODULE_ID}/images`;
+// The default sheet pre-selected on first install.
+const BUNDLED_DEFAULT = `${BUNDLED_DIR}/A.PNG`;
+
+// Shared top-level folders in the Foundry Data directory.
+// V13 explicitly allows uploads into new top-level folders created next to
+// modules/, systems/, and worlds/. Storing here means all worlds share the
+// same sheet pool; each world independently picks which sheet to use.
+const SHEETS_DIR = "sr5-die-sheets";
+const FACES_DIR  = "sr5-die-sheets/faces";
 
 // DiceSystem class imported during setup so diceSoNiceReady can run synchronously.
 let _DiceSystem = null;
+// Migration promise started in setup. diceSoNiceReady awaits it before
+// registering face textures so files always exist on the very first load.
+let _migrationPromise = null;
 
 // Hooks fire in order: init → setup → ready → diceSoNiceReady.
 // Importing here means _DiceSystem is set long before diceSoNiceReady fires.
 Hooks.once("setup", async () => {
   if (!game.modules.get("dice-so-nice")?.active) return;
+
+  // Start sheet migration BEFORE any await so _migrationPromise is guaranteed
+  // to be assigned before diceSoNiceReady fires, even if the DSN import is slow.
+  if (game.user?.isGM) {
+    _migrationPromise = Promise.all([
+      migrateBundledSheets().catch((err) => console.error("SR5 Dice | migration (sheets) failed:", err)),
+      migrateFacesReadme().catch((err)  => console.error("SR5 Dice | migration (faces README) failed:", err)),
+    ]);
+  }
+
   try {
     ({ DiceSystem: _DiceSystem } = await import("/modules/dice-so-nice/api.js"));
   } catch (err) {
@@ -36,11 +60,12 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: String,
-    default: "",
+    default: BUNDLED_DEFAULT,
     restricted: true,
     requiresReload: true,
   });
 });
+
 
 // ── Settings config injection ────────────────────────────────────────────────
 
@@ -60,18 +85,27 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
   formGroup.style.flexDirection = "column";
   formGroup.style.alignItems = "flex-start";
 
+  // SHEETS_DIR is already populated by the ready hook migration.
+  // Just browse what is there — no async migration latency here.
   let available = [];
   try {
-    const result = await FilePicker.browse("data", IMAGES_DIR);
+    const result = await FilePicker.browse("data", SHEETS_DIR);
     available = result.files.filter((f) => /\.(webp|png|jpg|jpeg)$/i.test(f));
-  } catch { /* images folder may not exist yet */ }
+  } catch { /* sheets folder may not exist yet */ }
 
   const current = game.settings.get(MODULE_ID, "spriteImage");
+  // If the setting still holds the bundled default path, map it to the
+  // equivalent SHEETS_DIR path for highlight purposes so A.PNG appears
+  // pre-selected the first time the user opens settings.
+  const isBundledSetting = current.startsWith(`modules/${MODULE_ID}/`);
+  const displayCurrent = isBundledSetting
+    ? `${SHEETS_DIR}/${current.split("/").pop()}`
+    : current;
   const esc = (v) => foundry.utils.escapeHTML(String(v ?? ""));
   const fname = (p) => p.split("/").pop();
 
   const thumbsHtml = available.map((path) => {
-    const sel = path === current;
+    const sel = path === displayCurrent;
     return [
       `<div class="sr5-thumb" data-path="${esc(path)}"`,
       ` style="cursor:pointer;padding:4px;margin-bottom:2px;border-radius:4px;`,
@@ -87,13 +121,13 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
 
   const listHtml = available.length
     ? `<div style="width:90%;max-height:400px;overflow-y:auto;border:1px solid var(--color-border-light-tertiary,#999);border-radius:4px;padding:4px;box-sizing:border-box;">${thumbsHtml}</div>`
-    : `<p style="font-style:italic;font-size:.85em;margin:4px 0;">No images found in <code>${esc(IMAGES_DIR)}/</code>.</p>`;
+    : `<p style="font-style:italic;font-size:.85em;margin:4px 0;">No images found in <code>${esc(SHEETS_DIR)}/</code>.</p>`;
 
   const container = document.createElement("div");
   container.style.cssText = "width:100%;margin-top:4px;";
   container.innerHTML = [
     `<p style="font-size:.85em;margin:0 0 6px;white-space:normal;">`,
-    `Place sprite sheets (6 faces, left to right) in <code>${esc(IMAGES_DIR)}/</code>.<br>`,
+    `Add or remove sprite sheets in <code>${esc(SHEETS_DIR)}/</code> — shared across all worlds.<br>`,
     `Click a sprite to select and slice it, then click <strong>Save Changes</strong>.</p>`,
     `<input type="hidden" name="${MODULE_ID}.spriteImage" id="sr5-path-input" value="${esc(current)}">`,
     listHtml,
@@ -113,8 +147,12 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
       const origText = label.textContent;
       label.textContent = "\u29d7 Slicing\u2026";
       try {
-        await sliceAndUploadFaces(path);
+        // Set the saved path immediately so that clicking Save before slicing
+        // finishes still records the correct sheet. If slicing is still in
+        // progress on reload, faces may 404 silently; the user only needs to
+        // click the sheet again and save once more.
         container.querySelector("#sr5-path-input").value = path;
+        await sliceAndUploadFaces(path);
         allCards.forEach((c) => {
           const sel = c.dataset.path === path;
           c.style.borderColor = sel ? "#094d97" : "transparent";
@@ -139,6 +177,68 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
+ * Ensure every segment of path exists in the "data" source, creating
+ * directories one level at a time. FilePicker.upload does NOT create missing
+ * directories, so this must be called before any upload into a new path.
+ */
+async function ensureDir(path) {
+  const parts = path.split("/");
+  let current = "";
+  for (const part of parts) {
+    current = current ? `${current}/${part}` : part;
+    try {
+      await FilePicker.createDirectory("data", current, {});
+    } catch (err) {
+      // Ignore "already exists" — re-throw anything unexpected.
+      const msg = String(err?.message ?? err).toLowerCase();
+      if (!msg.includes("already exists") && !msg.includes("eexist"))
+        console.error(`SR5 Dice | ensureDir: could not create "${current}":`, err);
+    }
+  }
+}
+
+/**
+ * Copy bundled sample sheets from the module's images/ folder into the
+ * writable SHEETS_DIR. Already-present files are skipped.
+ */
+async function migrateBundledSheets() {
+  let bundled = [];
+  try {
+    const r = await FilePicker.browse("data", BUNDLED_DIR);
+    bundled = r.files.filter((f) => /\.(webp|png|jpg|jpeg|md)$/i.test(f));
+  } catch (err) {
+    console.error("SR5 Dice | migrateBundledSheets: could not browse bundled dir:", err);
+    return;
+  }
+  if (!bundled.length) {
+    console.warn(`SR5 Dice | migrateBundledSheets: no images found in ${BUNDLED_DIR}`);
+    return;
+  }
+
+  await ensureDir(SHEETS_DIR);
+
+  const existing = new Set();
+  try {
+    const r = await FilePicker.browse("data", SHEETS_DIR);
+    for (const f of r.files) existing.add(f.split("/").pop().toLowerCase());
+  } catch { /* still empty — that's fine */ }
+
+  for (const path of bundled) {
+    const name = path.split("/").pop();
+    if (existing.has(name.toLowerCase())) continue;
+    try {
+      const resp = await fetch(path, { credentials: "same-origin" });
+      if (!resp.ok) { console.error(`SR5 Dice | migrateBundledSheets: fetch failed for "${name}": ${resp.status}`); continue; }
+      const blob = await resp.blob();
+      const file = new File([blob], name, { type: blob.type });
+      await FilePicker.upload("data", SHEETS_DIR, file, {}, { notify: false });
+    } catch (err) {
+      console.error(`SR5 Dice | migrateBundledSheets: could not migrate "${name}":`, err);
+    }
+  }
+}
+
+/**
  * Load imagePath, slice it into 6 equal vertical strips (columns), and upload
  * each strip as an individual .webp file. The sprite sheet is a single row of
  * 6 faces arranged left to right (smallest die face at left).
@@ -147,7 +247,7 @@ Hooks.on("renderSettingsConfig", async (_app, html) => {
  * label is an image. These filenames end with .webp so DSN loads them as
  * textures. Using individual files avoids needing an atlas JSON.
  *
- * Uploaded as: {folder}/faces/{baseName}-face-1.webp … {baseName}-face-6.webp
+ * Always writes sr5-face-1.webp … sr5-face-6.webp, overwriting any previous slice.
  */
 async function sliceAndUploadFaces(imagePath) {
   const img = await new Promise((res, rej) => {
@@ -163,10 +263,10 @@ async function sliceAndUploadFaces(imagePath) {
     el.src = imagePath;
   });
 
-  const h   = img.naturalHeight;
-  const fw  = Math.floor(img.naturalWidth / 6);
-  const folder   = imagePath.substring(0, imagePath.lastIndexOf("/")) + "/faces";
-  const baseName = imagePath.split("/").pop().replace(/\.[^.]+$/, "");
+  const h  = img.naturalHeight;
+  const fw = Math.floor(img.naturalWidth / 6);
+
+  await ensureDir(FACES_DIR);
 
   for (let i = 0; i < 6; i++) {
     const cv = document.createElement("canvas");
@@ -174,17 +274,17 @@ async function sliceAndUploadFaces(imagePath) {
     cv.height = h;
     cv.getContext("2d").drawImage(img, -i * fw, 0);
     const blob = await new Promise((res) => cv.toBlob(res, "image/webp", 0.92));
-    const file = new File([blob], `${baseName}-face-${i + 1}.webp`, { type: "image/webp" });
-    await FilePicker.upload("data", folder, file, {}, { notify: false });
+    const file = new File([blob], `sr5-face-${i + 1}.webp`, { type: "image/webp" });
+    await FilePicker.upload("data", FACES_DIR, file, {}, { notify: false });
   }
 }
 
 // ── Dice So Nice ready ────────────────────────────────────────────────────────
 
-// This handler is intentionally synchronous. _DiceSystem was imported during
-// the setup hook, and the atlas JSON was generated when the setting was saved,
-// so no async operations are needed here.
-Hooks.once("diceSoNiceReady", (dice3d) => {
+// Declared async so it can await _migrationPromise before registering face
+// textures. Foundry does not await hook handler return values, so DSN
+// initialisation is not blocked — our handler simply completes in the background.
+Hooks.once("diceSoNiceReady", async (dice3d) => {
   if (!dice3d) return;
   if (game.system?.id !== SR5_SYSTEM_ID) return;
 
@@ -209,11 +309,26 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
   const imagePath = game.settings.get(MODULE_ID, "spriteImage")?.trim();
   if (!imagePath) return;
 
-  // Derive the 6 pre-uploaded face paths using the same formula as sliceAndUploadFaces.
-  // Labels end with .webp so DSN's loadTextureType() treats them as image URLs.
-  const folder   = imagePath.substring(0, imagePath.lastIndexOf("/")) + "/faces";
-  const baseName = imagePath.split("/").pop().replace(/\.[^.]+$/, "");
-  const FACE_LABELS = Array.from({ length: 6 }, (_, i) => `${folder}/${baseName}-face-${i + 1}.webp`);
+  // Wait for sheet migration, then ensure faces exist for the current sheet.
+  // On the very first load the faces won't be in FACES_DIR yet regardless of
+  // how migration ran, so we check and slice on demand. sliceAndUploadFaces()
+  // is idempotent in practice: it overwrites existing files harmlessly.
+  if (_migrationPromise) await _migrationPromise;
+
+  const FACE_LABELS = Array.from({ length: 6 }, (_, i) => `${FACES_DIR}/sr5-face-${i + 1}.webp`);
+
+  // Track which sheet was last sliced in localStorage — instant check with no
+  // network round-trip, and correctly detects when the sheet has changed.
+  const lsKey = `${MODULE_ID}.lastSliced`;
+  if (localStorage.getItem(lsKey) !== imagePath) {
+    try {
+      await sliceAndUploadFaces(imagePath);
+      localStorage.setItem(lsKey, imagePath);
+    } catch (err) {
+      console.error("SR5 Dice | diceSoNiceReady: could not slice faces:", err);
+      return; // can't register without faces
+    }
+  }
 
   const sr5System = new _DiceSystem("sr5-die", "SR5 Die", "default", "Dice So Nice!");
   dice3d.addSystem(sr5System, "default");
@@ -242,3 +357,16 @@ Hooks.once("diceSoNiceReady", (dice3d) => {
   if (d6p?.loadTextures) d6p.loadTextures().catch((e) => console.error("SR5 Dice (d6):", e));
   if (dsp?.loadTextures) dsp.loadTextures().catch((e) => console.error("SR5 Dice (ds):", e));
 });
+
+async function migrateFacesReadme() {
+  const srcPath = `${BUNDLED_DIR}/faces/README.md`;
+  const resp = await fetch(srcPath, { credentials: "same-origin" });
+  if (!resp.ok) return; // no README bundled — skip silently
+  await ensureDir(FACES_DIR);
+  try {
+    const r = await FilePicker.browse("data", FACES_DIR);
+    if (r.files.some((f) => f.split("/").pop().toLowerCase() === "readme.md")) return;
+  } catch { /* FACES_DIR still empty — continue to upload */ }
+  const blob = await resp.blob();
+  await FilePicker.upload("data", FACES_DIR, new File([blob], "README.md", { type: "text/markdown" }), {}, { notify: false });
+}
