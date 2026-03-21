@@ -13,7 +13,7 @@ Each image must be:
 
 The images will appear as selectable options in **Module Settings → Custom SR5 die option for Dice So Nice**.
 
-<img width="558" height="539" alt="image" src="https://github.com/user-attachments/assets/c8ce7eb5-a089-4b6e-8f9c-ede3f2d7e784" />
+<img width="552" height="528" alt="image" src="https://github.com/user-attachments/assets/f2c44473-e1fb-4a57-b56a-5dd1dda13e0b" />
 
 
 
