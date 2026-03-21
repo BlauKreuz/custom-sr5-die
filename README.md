@@ -5,7 +5,7 @@ A Foundry VTT module for enabling custom faces to SR5 custom die (ds) and normal
 
 
 
-There are some sample die sprite sheets included and more can be added by placing them in custom-sr5-die/images folder.
+There are some sample die sprite sheets included and more can be added by placing them in Data/sr5-die-sheets folder folder.
 Each image must be:
 - A single column with **6 faces side by side** (face 1 at left, face 6 at right)
 - Any square-faced size, e.g. 258 × 1548 px (258 px per face)
