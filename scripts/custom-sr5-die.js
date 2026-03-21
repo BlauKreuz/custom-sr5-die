@@ -39,10 +39,9 @@ Hooks.once("setup", async () => {
   // Start sheet migration BEFORE any await so _migrationPromise is guaranteed
   // to be assigned before diceSoNiceReady fires, even if the DSN import is slow.
   if (game.user?.isGM) {
-    _migrationPromise = Promise.all([
-      migrateBundledSheets().catch((err) => console.error("SR5 Dice | migration (sheets) failed:", err)),
-      migrateFacesReadme().catch((err)  => console.error("SR5 Dice | migration (faces README) failed:", err)),
-    ]);
+    _migrationPromise = migrateBundledSheets().catch((err) =>
+      console.error("SR5 Dice | migration (sheets) failed:", err)
+    );
   }
 
   try {
@@ -247,7 +246,9 @@ async function migrateBundledSheets() {
  * label is an image. These filenames end with .webp so DSN loads them as
  * textures. Using individual files avoids needing an atlas JSON.
  *
- * Always writes sr5-face-1.webp … sr5-face-6.webp, overwriting any previous slice.
+ * Writes {baseName}-face-1.webp … {baseName}-face-6.webp, where baseName is derived
+ * from imagePath. Unique names per sheet avoid Forge CDN and PIXI texture cache
+ * stale hits that occur when overwriting a fixed generic filename.
  */
 async function sliceAndUploadFaces(imagePath) {
   const img = await new Promise((res, rej) => {
@@ -263,8 +264,9 @@ async function sliceAndUploadFaces(imagePath) {
     el.src = imagePath;
   });
 
-  const h  = img.naturalHeight;
-  const fw = Math.floor(img.naturalWidth / 6);
+  const h        = img.naturalHeight;
+  const fw       = Math.floor(img.naturalWidth / 6);
+  const baseName = imagePath.split("/").pop().replace(/\.[^.]+$/, "");
 
   await ensureDir(FACES_DIR);
 
@@ -274,7 +276,7 @@ async function sliceAndUploadFaces(imagePath) {
     cv.height = h;
     cv.getContext("2d").drawImage(img, -i * fw, 0);
     const blob = await new Promise((res) => cv.toBlob(res, "image/webp", 0.92));
-    const file = new File([blob], `sr5-face-${i + 1}.webp`, { type: "image/webp" });
+    const file = new File([blob], `${baseName}-face-${i + 1}.webp`, { type: "image/webp" });
     await FilePicker.upload("data", FACES_DIR, file, {}, { notify: false });
   }
 }
@@ -315,10 +317,13 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
   // is idempotent in practice: it overwrites existing files harmlessly.
   if (_migrationPromise) await _migrationPromise;
 
-  const FACE_LABELS = Array.from({ length: 6 }, (_, i) => `${FACES_DIR}/sr5-face-${i + 1}.webp`);
+  const baseName   = imagePath.split("/").pop().replace(/\.[^.]+$/, "");
+  const FACE_LABELS = Array.from({ length: 6 }, (_, i) => `${FACES_DIR}/${baseName}-face-${i + 1}.webp`);
 
   // Track which sheet was last sliced in localStorage — instant check with no
   // network round-trip, and correctly detects when the sheet has changed.
+  // Each sheet uses uniquely-named face files so Forge CDN and PIXI always
+  // see fresh URLs when the sheet changes — no stale cache hits.
   const lsKey = `${MODULE_ID}.lastSliced`;
   if (localStorage.getItem(lsKey) !== imagePath) {
     try {
@@ -358,15 +363,4 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
   if (dsp?.loadTextures) dsp.loadTextures().catch((e) => console.error("SR5 Dice (ds):", e));
 });
 
-async function migrateFacesReadme() {
-  const srcPath = `${BUNDLED_DIR}/faces/README.md`;
-  const resp = await fetch(srcPath, { credentials: "same-origin" });
-  if (!resp.ok) return; // no README bundled — skip silently
-  await ensureDir(FACES_DIR);
-  try {
-    const r = await FilePicker.browse("data", FACES_DIR);
-    if (r.files.some((f) => f.split("/").pop().toLowerCase() === "readme.md")) return;
-  } catch { /* FACES_DIR still empty — continue to upload */ }
-  const blob = await resp.blob();
-  await FilePicker.upload("data", FACES_DIR, new File([blob], "README.md", { type: "text/markdown" }), {}, { notify: false });
-}
+
