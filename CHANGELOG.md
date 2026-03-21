@@ -1,4 +1,4 @@
-## 0.4 - 21 Mar 2026 - Fixes for ForgeVTT assets folder structure problem
+## 0.5 - 21 Mar 2026 - Fixes for ForgeVTT assets folder structure problem
 
 ## 0.3 - 20 Mar 2026 - Fixes for ForgeVTT
 
