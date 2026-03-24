@@ -8,7 +8,7 @@ For help and suggestions: [![Discord Server](https://img.shields.io/badge/-Disco
 
 
 
-There are some sample die sprite sheets included and more can be added by placing them in Data/sr5-die-sheets folder folder.
+There are some sample die sprite sheets included and more can be added by placing them in (Forge: My Assets Library/sr5-die-sheets) (Local: data/Data/sr5-die-sheets) folder.
 Each image must be:
 - A single column with **6 faces side by side** (face 1 at left, face 6 at right)
 - Any square-faced size, e.g. 258 × 1548 px (258 px per face)
