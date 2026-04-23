@@ -1,6 +1,6 @@
 # Custom SR5 die option for Dice So Nice
 
-For help and suggestions: [![Discord Server](https://img.shields.io/badge/-Discord-%232c2f33?style=flat-square&logo=discord)](https://discord.gg/VCBXfE8m)
+For help and suggestions: [![Discord Server](https://img.shields.io/badge/-Discord-%232c2f33?style=flat-square&logo=discord)](https://discord.gg/NyCX2nN4qP)
 
   A Foundry VTT module for enabling custom faces to SR5 custom die (ds) and normal D6 (d6) in Dice-So-Nice.
 
