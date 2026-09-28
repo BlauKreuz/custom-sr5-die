@@ -294,15 +294,18 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
 
   // Unlock every existing DSN system for the ds die type so that Dot Black
   // and others remain selectable (DSN's filterSystems() requires the die type
-  // to be registered in each system's dice map).
-  // Skipping "standard" so the SR5 system's own text-label preset for ds is
-  // never touched. Passing the d6 reference directly is safe: the same object
-  // is already owned by this system so DiceMap.set's diceSystem assignment
-  // is a no-op, and its textures are already loaded.
+  // to be registered in each system's dice map). Each system needs its own
+  // preset object: DiceMap.set assigns ownership, so sharing one d6 instance
+  // across systems corrupts its type/system metadata.
   for (const [sysId, system] of factory.systems) {
     if (sysId !== "standard" && !system.dice.has(DS_TYPE)) {
       const d6 = system.dice.get("d6");
-      if (d6) system.dice.set(DS_TYPE, d6);
+      if (d6) {
+        const dsPreset = foundry.utils.deepClone(d6);
+        dsPreset.type = DS_TYPE;
+        dsPreset.system = sysId;
+        system.dice.set(DS_TYPE, dsPreset);
+      }
     }
   }
 
@@ -338,20 +341,42 @@ Hooks.once("diceSoNiceReady", async (dice3d) => {
   const sr5System = new _DiceSystem("sr5-die", "SR5 Die", "default", "Dice So Nice!");
   dice3d.addSystem(sr5System, "default");
 
-  // Save standard's ds preset before registering ours.
+  // Save standard's d6 and ds presets before registering ours. DSN's register()
+  // may replace either standard preset when the existing entry is internalAdd.
   // DSN's register() checks: if standard already has this die type AND the
   // existing preset has internalAdd=true (set by internalAddDicePreset, which
   // is how SR5 registers the ds die), it replaces standard's preset with our
   // new one. We don't want that — SR5 Die must only add a new system option
   // without touching what "standard" shows.
-  const standardDs = factory.systems.get("standard").dice.get(DS_TYPE);
+  const standardSystem = factory.systems.get("standard");
+  const standardD6 = standardSystem.dice.get("d6");
+  const standardDs = standardSystem.dice.get(DS_TYPE);
 
-  dice3d.addDicePreset({ type: "d6",    labels: FACE_LABELS, system: "sr5-die" }, "d6");
-  dice3d.addDicePreset({ type: DS_TYPE, labels: FACE_LABELS, system: "sr5-die" }, "d6");
+  // Validate face labels before registering presets.
+  if (!Array.isArray(FACE_LABELS) || FACE_LABELS.length !== 6 || FACE_LABELS.some(l => !l || typeof l !== 'string')) {
+    console.error('SR5 Dice | FACE_LABELS invalid, aborting preset registration', FACE_LABELS);
+    return;
+  }
 
-  // Restore standard's ds immediately after — DSN's register() may have
-  // replaced it due to the internalAdd flag. DiceMap.set won't mutate
-  // standardDs because the key already exists in the map.
+  const presetD6 = { type: "d6", labels: FACE_LABELS, system: "sr5-die" };
+  const presetDS = { type: DS_TYPE, labels: FACE_LABELS, system: "sr5-die" };
+
+  try {
+    dice3d.addDicePreset(presetD6, "d6");
+  } catch (err) {
+    console.error('SR5 Dice | addDicePreset(d6) failed', { preset: presetD6, error: err });
+  }
+
+  try {
+    dice3d.addDicePreset(presetDS, "d6");
+  } catch (err) {
+    console.error('SR5 Dice | addDicePreset(ds) failed', { preset: presetDS, error: err });
+  }
+
+  // Restore both standard entries immediately. In particular, leaving the
+  // custom d6 preset in standard can affect later DiceFactory rebuilds, which
+  // use standard d6 as the shape/model fallback for custom dice types.
+  if (standardD6) standardSystem.dice.set("d6", standardD6);
   if (standardDs) factory.systems.get("standard").dice.set(DS_TYPE, standardDs);
 
   // DSN's register() skips loadTextures() for our presets when standard already
